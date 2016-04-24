@@ -131,15 +131,49 @@ func DefOptOfNewObjectFunc(fn NewObjectFunc) DefinitionOption {
 func DefOptOfObjectRef(fieldName string, ref ObjectDefinition) DefinitionOption {
 	return DefinitionOption{func(od *ObjectDefinition) (err error) {
 
-		if field, exist := od.reflectVal.Type().Elem().FieldByName(fieldName); !exist {
-			err = ErrStructFieldNotExist.New(errors.Params{"name": fieldName})
+		fieldName = strings.TrimSpace(fieldName)
+
+		if fieldName == "" {
+			err = ErrEmptyFieldName.New()
 			return
-		} else if field.Type.Kind() != reflect.Ptr {
-			err = ErrRefFieldShouldBePtr.New()
-			return
-		} else if !ref.IsTypeMatch(field.Type) {
-			err = ErrRefTypeNotMatch.New(errors.Params{"typeA": ref.Type().String(), "typeB": field.Type.String()})
-			return
+		}
+
+		fieldNames := strings.Split(fieldName, ".")
+		lenfields := len(fieldNames)
+
+		var typ reflect.Type
+		typ = od.reflectVal.Type()
+		if od.reflectVal.Kind() == reflect.Ptr {
+			typ = od.reflectVal.Type().Elem()
+		}
+
+		for i, fn := range fieldNames {
+
+			fn = strings.TrimSpace(fn)
+			if fn == "" {
+				err = ErrBadFieldName.New(errors.Params{"name": fieldName})
+				return
+			}
+
+			var field reflect.StructField
+			var exist bool
+
+			if field, exist = typ.FieldByName(fn); !exist {
+				err = ErrStructFieldNotExist.New(errors.Params{"name": fieldName})
+				return
+			}
+
+			if i+1 >= lenfields {
+				if field.Type.Kind() != reflect.Ptr {
+					err = ErrRefFieldShouldBePtr.New()
+					return
+				} else if !ref.IsTypeMatch(field.Type) {
+					err = ErrRefTypeNotMatch.New(errors.Params{"typeA": ref.Type().String(), "typeB": field.Type.String()})
+					return
+				}
+			}
+
+			typ = field.Type
 		}
 
 		od.refs[fieldName] = &ref

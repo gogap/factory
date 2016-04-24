@@ -4,6 +4,7 @@ import (
 	"github.com/gogap/errors"
 	"github.com/rs/xid"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -274,32 +275,31 @@ func (p *ClassicFactory) setStructFieldValue(v interface{}, fieldName string, fi
 		return
 	}
 
-	fieldVal := val.FieldByName(fieldName)
+	fieldNames := strings.Split(fieldName, ".")
+	lenfields := len(fieldNames)
 
-	if !fieldVal.IsValid() {
-		err = ErrReflectValueNotValid.New()
-		return
-	}
+	var fieldVal reflect.Value
 
-	if fieldVal.Kind() != reflect.Ptr {
-		err = ErrRefObjectShouldBePtr.New()
-		return
+	for i, fn := range fieldNames {
+		if fieldVal = val.FieldByName(fn); !fieldVal.IsValid() {
+			err = ErrReflectValueNotValid.New()
+			return
+		}
+
+		if i+1 >= lenfields && fieldVal.Kind() != reflect.Ptr {
+			err = ErrRefObjectShouldBePtr.New()
+			return
+		}
+
+		val = fieldVal
 	}
 
 	newVal := reflect.ValueOf(fieldValue)
 
-	if fieldVal.Kind() == reflect.Ptr {
-		if newVal.Kind() == reflect.Ptr {
-			fieldVal.Set(newVal)
-		} else if newVal.Kind() == reflect.Struct {
-			fieldVal.Set(reflect.Indirect(newVal))
-		}
-	} else if fieldVal.Kind() == reflect.Struct {
-		if newVal.Kind() == reflect.Ptr {
-			fieldVal.Set(newVal.Elem())
-		} else if newVal.Kind() == reflect.Struct {
-			fieldVal.Set(newVal)
-		}
+	if newVal.Kind() == reflect.Ptr {
+		fieldVal.Set(newVal)
+	} else if newVal.Kind() == reflect.Struct {
+		fieldVal.Set(reflect.Indirect(newVal))
 	}
 
 	return

@@ -9,6 +9,10 @@ type testObjectB struct {
 	BValue string
 }
 
+type testObjectC struct {
+	CValue *testObjectB
+}
+
 func newTestObjectB(opts Options) (v interface{}, err error) {
 	return &testObjectB{BValue: "VB"}, nil
 }
@@ -17,6 +21,7 @@ type testObject struct {
 	isFromNewFunc bool
 
 	ObjB *testObjectB
+	ObjC testObjectC
 }
 
 func newTestObject(opts Options) (v interface{}, err error) {
@@ -133,7 +138,8 @@ func TestClassicFactoryOfObjRef(t *testing.T) {
 		Prototype,
 		new(testObject),
 		DefOptOfNewObjectFunc(newTestObject),
-		DefOptOfObjectRef("ObjB", objBDef)); err != nil {
+		DefOptOfObjectRef("ObjB", objBDef),
+		DefOptOfObjectRef("ObjC.CValue", objBDef)); err != nil {
 		t.Error(err)
 		return
 	}
@@ -157,6 +163,11 @@ func TestClassicFactoryOfObjRef(t *testing.T) {
 
 	if objIns.ObjB.BValue != "VB" {
 		t.Error("field of ObjB ref object B's value is not 'VB'")
+		return
+	}
+
+	if objIns.ObjC.CValue.BValue != "VB" {
+		t.Error("field of ObjC.CValue ref object B's value is not 'VB'")
 		return
 	}
 

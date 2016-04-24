@@ -22,4 +22,6 @@ var (
 	ErrObjectIsNotStruct                 = errors.TN(ErrNamespace, 1010, "the object must be a struct or ptr to struct")
 	ErrRefObjectShouldBePtr              = errors.TN(ErrNamespace, 1011, "ref object should be ptr")
 	ErrRefFieldShouldBePtr               = errors.TN(ErrNamespace, 1012, "ref field should be ptr")
+	ErrEmptyFieldName                    = errors.TN(ErrNamespace, 1013, "empty field name")
+	ErrBadFieldName                      = errors.TN(ErrNamespace, 1014, "bad field name, field name: {{.name}}")
 )
