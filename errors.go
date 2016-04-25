@@ -29,4 +29,7 @@ var (
 	ErrModelNotExist                     = errors.TN(ErrNamespace, 1018, "model of {{.name}} not exist")
 	ErrRefDefinitionNameIsEmpty          = errors.TN(ErrNamespace, 1019, "ref definition name is empty, def name: {{.name}}")
 	ErrFiledAreadyRef                    = errors.TN(ErrNamespace, 1020, "field already ref others definition, original ref defition name: {{.name}}")
+	ErrFieldIsZeroValue                  = errors.TN(ErrNamespace, 1021, "filed is zero value, field name: {{.name}}")
+	ErrBadRefOrderLength                 = errors.TN(ErrNamespace, 1022, "ref order does not equal definition refs")
+	ErrRefOrderContainNonExistRef        = errors.TN(ErrNamespace, 1023, "ref order contain non exist def ref, name: {{.name}}")
 )

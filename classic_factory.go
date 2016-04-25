@@ -118,7 +118,6 @@ func (p *ClassicFactory) IsTypeMatch(name string, typ reflect.Type) bool {
 }
 
 func (p *ClassicFactory) registerObjectDefinition(definition *ObjectDefinition) (err error) {
-
 	p.objLocker.Lock()
 	defer p.objLocker.Unlock()
 
@@ -195,7 +194,10 @@ func (p *ClassicFactory) getObjDefinition(name string) (def *ObjectDefinition, e
 		}
 	}
 
-	err = ErrObjectDefintionNotExist.New(errors.Params{"name": name})
+	if err = ErrObjectDefintionNotExist.New(errors.Params{"name": name}); err != nil {
+		return
+	}
+
 	return
 }
 
@@ -204,10 +206,8 @@ func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj int
 	var retObj interface{}
 
 	if def.Scope() == Singleton {
-		var exist bool
 
-		p.objLocker.Lock()
-		defer p.objLocker.Unlock()
+		var exist bool
 
 		var objIns *ObjectInstance
 		if objIns, exist = p.objInstances[def.Name()]; exist {
@@ -249,7 +249,10 @@ func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj int
 
 	// Get ref objects
 	var refObjs = make(map[string]interface{})
-	for fieldName, refDefName := range def.refs {
+	for _, fieldName := range def.refsOrder {
+
+		refDefName := def.refs[fieldName]
+
 		var refDef *ObjectDefinition
 		var exist bool
 		if refDef, exist = p.objDefinitions[refDefName]; !exist {
@@ -269,7 +272,11 @@ func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj int
 	}
 
 	// Inject dependency object
-	for fieldName, fieldValue := range refObjs {
+
+	for _, fieldName := range def.refsOrder {
+
+		fieldValue := refObjs[fieldName]
+
 		if err = p.setStructFieldValue(retObj, fieldName, fieldValue); err != nil {
 			return
 		}
@@ -281,6 +288,9 @@ func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj int
 }
 
 func (p *ClassicFactory) getNewInstanceFunc(def *ObjectDefinition) (fn NewObjectFunc, err error) {
+	p.objLocker.Lock()
+	defer p.objLocker.Unlock()
+
 	fn = def.NewObjectFunc()
 
 	if fn != nil {
@@ -348,6 +358,25 @@ func (p *ClassicFactory) setStructFieldValue(v interface{}, fieldName string, fi
 	var fieldVal reflect.Value
 
 	for i, fn := range fieldNames {
+
+		for {
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			} else {
+				break
+			}
+		}
+
+		if !val.IsValid() {
+			err = ErrFieldIsZeroValue.New(errors.Params{"name": fieldName})
+			return
+		}
+
+		// if reflect.Zero(val.Type()) == val {
+		// 	err = ErrFieldIsZeroValue.New(errors.Params{"name": fn})
+		// 	return
+		// }
+
 		if fieldVal = val.FieldByName(fn); !fieldVal.IsValid() {
 			err = ErrReflectValueNotValid.New()
 			return

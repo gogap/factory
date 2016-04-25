@@ -29,6 +29,7 @@ type ObjectDefinition struct {
 	typ             reflect.Type
 	refs            map[string]string
 	refsOptions     map[string]Options
+	refsOrder       []string
 	initialFuncName string
 }
 
@@ -126,6 +127,14 @@ func DefOptOfObjectRef(fieldName string, refDefName string, opts ...Options) Def
 			var field reflect.StructField
 			var exist bool
 
+			for {
+				if typ.Kind() == reflect.Ptr {
+					typ = typ.Elem()
+				} else {
+					break
+				}
+			}
+
 			if field, exist = typ.FieldByName(fn); !exist {
 				err = ErrStructFieldNotExist.New(errors.Params{"name": fieldName})
 				return
@@ -146,6 +155,8 @@ func DefOptOfObjectRef(fieldName string, refDefName string, opts ...Options) Def
 			od.refsOptions[fieldName] = opts[0]
 		}
 
+		od.refsOrder = append(od.refsOrder, fieldName)
+
 		return
 	}}
 }
@@ -155,4 +166,42 @@ func DefOptOfInitialFunc(fnName string) DefinitionOption {
 		od.initialFuncName = fnName
 		return
 	}}
+}
+
+func DefOptOfRefOrder(check bool, order ...string) DefinitionOption {
+	return DefinitionOption{func(od *ObjectDefinition) (err error) {
+		if check {
+
+			tmpOrder := removeDuplicates(order)
+
+			if len(tmpOrder) != len(od.refs) {
+				err = ErrBadRefOrderLength.New()
+				return
+			}
+
+			for _, filedName := range tmpOrder {
+				if _, exist := od.refs[filedName]; !exist {
+					err = ErrRefOrderContainNonExistRef.New(errors.Params{"name": filedName})
+					return
+				}
+			}
+		}
+
+		od.refsOrder = order
+		return
+	}}
+}
+
+func removeDuplicates(elements []string) []string {
+	encountered := map[string]bool{}
+
+	for v := range elements {
+		encountered[elements[v]] = true
+	}
+
+	result := []string{}
+	for key, _ := range encountered {
+		result = append(result, key)
+	}
+	return result
 }

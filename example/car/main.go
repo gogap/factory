@@ -6,8 +6,21 @@ import (
 	"github.com/gogap/factory"
 )
 
+type Hub struct {
+	ID string
+}
+
+func NewHub(opts factory.Options) (hub interface{}, err error) {
+	h := &Hub{}
+	opts.Get("id", &h.ID)
+	hub = h
+	return
+}
+
 type Wheel struct {
 	ID string
+
+	Hub *Hub
 }
 
 func NewWheel(opts factory.Options) (wheel interface{}, err error) {
@@ -18,7 +31,7 @@ func NewWheel(opts factory.Options) (wheel interface{}, err error) {
 }
 
 func (p *Wheel) Run() {
-	fmt.Printf("Wheel Running, ID: %s\n", p.ID)
+	fmt.Printf("Wheel Running, ID: %s, HubID: %s\n", p.ID, p.Hub.ID)
 }
 
 type Car struct {
@@ -47,23 +60,39 @@ func NewCar(opts factory.Options) (car interface{}, err error) {
 }
 
 func init() {
+	factory.RegisterModel((*Hub)(nil), "BBS")
 	factory.RegisterModel((*Wheel)(nil), "Michelin")
 	factory.RegisterModel((*Car)(nil), "Skoda")
 }
 
 func main() {
+
+	var err error
+
 	carFactory := factory.NewClassicFactory(nil)
+
+	carFactory.Define("hub", factory.Prototype, "BBS", factory.DefOptOfNewObjectFunc(NewHub))
 
 	carFactory.Define("wheel", factory.Prototype, "Michelin", factory.DefOptOfNewObjectFunc(NewWheel))
 
-	carFactory.Define("mycar", factory.Prototype, "Skoda",
+	err = carFactory.Define("mycar", factory.Prototype, "Skoda",
 		factory.DefOptOfNewObjectFunc(NewCar),
 		factory.DefOptOfObjectRef("Wheel1", "wheel", factory.Options{"id": "1"}),
 		factory.DefOptOfObjectRef("Wheel2", "wheel", factory.Options{"id": "2"}),
 		factory.DefOptOfObjectRef("Wheel3", "wheel", factory.Options{"id": "3"}),
-		factory.DefOptOfObjectRef("Wheel4", "wheel", factory.Options{"id": "4"}))
+		factory.DefOptOfObjectRef("Wheel4", "wheel", factory.Options{"id": "4"}),
+		factory.DefOptOfObjectRef("Wheel1.Hub", "hub", factory.Options{"id": "HUB01"}),
+		factory.DefOptOfObjectRef("Wheel2.Hub", "hub", factory.Options{"id": "HUB02"}),
+		factory.DefOptOfObjectRef("Wheel3.Hub", "hub", factory.Options{"id": "HUB03"}),
+		factory.DefOptOfObjectRef("Wheel4.Hub", "hub", factory.Options{"id": "HUB04"}),
+	)
 
-	myCar, err := carFactory.GetObject("mycar", factory.Options{"owner": "gogap"})
+	if err != nil {
+		return
+	}
+
+	var myCar interface{}
+	myCar, err = carFactory.GetObject("mycar", factory.Options{"owner": "GoGap"})
 
 	if err != nil {
 		fmt.Println(err)
