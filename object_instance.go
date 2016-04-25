@@ -12,7 +12,7 @@ type ObjectInstance struct {
 }
 
 func (p *ObjectInstance) String() string {
-	return fmt.Sprintf("<name: %s, id: %s, type: %s>", p.definition.Name(), p.id, p.definition.Type().String())
+	return fmt.Sprintf("< name: %s, id: %s, type: %s::%s >", p.definition.name, p.id, p.definition.Type().PkgPath(), p.definition.Type().String())
 }
 
 func (p *ObjectInstance) Id() string {

@@ -11,16 +11,23 @@ import (
 type ClassicFactory struct {
 	objLocker sync.Mutex
 
-	objDefines   map[string]*ObjectDefinition
-	objAliases   map[string]string
-	objInstances map[string]*ObjectInstance
+	objDefinitions map[string]*ObjectDefinition
+	objAliases     map[string]string
+	objInstances   map[string]*ObjectInstance
+
+	modelProvider ModelProvider
 }
 
-func NewClassicFactory() *ClassicFactory {
+func NewClassicFactory(modelProvider ModelProvider) Factory {
+	if modelProvider == nil {
+		modelProvider = defaultModelProvider
+	}
+
 	return &ClassicFactory{
-		objDefines:   make(map[string]*ObjectDefinition),
-		objAliases:   make(map[string]string),
-		objInstances: make(map[string]*ObjectInstance),
+		objDefinitions: make(map[string]*ObjectDefinition),
+		objAliases:     make(map[string]string),
+		objInstances:   make(map[string]*ObjectInstance),
+		modelProvider:  modelProvider,
 	}
 }
 
@@ -77,7 +84,6 @@ func (p *ClassicFactory) GetType(name string) (typ reflect.Type) {
 
 	typ = def.Type()
 	return
-
 }
 
 func (p *ClassicFactory) IsPrototype(name string) bool {
@@ -111,17 +117,66 @@ func (p *ClassicFactory) IsTypeMatch(name string, typ reflect.Type) bool {
 	return false
 }
 
-func (p *ClassicFactory) RegisterObjectDefinition(definition ObjectDefinition) (err error) {
+func (p *ClassicFactory) registerObjectDefinition(definition *ObjectDefinition) (err error) {
 
 	p.objLocker.Lock()
 	defer p.objLocker.Unlock()
 
-	if _, exist := p.objDefines[definition.Name()]; exist {
+	if _, exist := p.objDefinitions[definition.Name()]; exist {
 		err = ErrObjectDefinitionAlreadyRegistered.New(errors.Params{"name": definition.Name(), "type": definition.Type()})
 		return
 	}
 
-	p.objDefines[definition.Name()] = &definition
+	p.objDefinitions[definition.Name()] = definition
+
+	return
+}
+
+func (p *ClassicFactory) Define(
+	name string,
+	scope Scope,
+	model string,
+	opts ...DefinitionOption) (err error) {
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = ErrEmptyObjectDefinitionName.New()
+		return
+	}
+
+	model = strings.TrimSpace(model)
+	if model == "" {
+		err = ErrModelNameIsEmpty.New()
+		return
+	}
+
+	var typ reflect.Type
+	var exist bool
+	if typ, exist = p.modelProvider.Get(model); !exist {
+		err = ErrModelNotExist.New(errors.Params{"name": model})
+		return
+	}
+
+	if typ.Kind() != reflect.Struct {
+		err = ErrObjectMustBeStruct.New(errors.Params{"name": name})
+		return
+	}
+
+	def := &ObjectDefinition{
+		name:        name,
+		scope:       scope,
+		typ:         typ,
+		refs:        make(map[string]string),
+		refsOptions: make(map[string]Options),
+	}
+
+	if err = def.options(opts...); err != nil {
+		return
+	}
+
+	if err = p.registerObjectDefinition(def); err != nil {
+		return
+	}
 
 	return
 }
@@ -129,13 +184,13 @@ func (p *ClassicFactory) RegisterObjectDefinition(definition ObjectDefinition) (
 func (p *ClassicFactory) getObjDefinition(name string) (def *ObjectDefinition, err error) {
 	var exist bool
 
-	if def, exist = p.objDefines[name]; exist {
+	if def, exist = p.objDefinitions[name]; exist {
 		return
 	}
 
 	var originalName string
 	if originalName, exist = p.objAliases[name]; exist {
-		if def, exist = p.objDefines[originalName]; exist {
+		if def, exist = p.objDefinitions[originalName]; exist {
 			return
 		}
 	}
@@ -145,15 +200,6 @@ func (p *ClassicFactory) getObjDefinition(name string) (def *ObjectDefinition, e
 }
 
 func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj interface{}, err error) {
-	// Get ref objects
-	var refObjs = make(map[string]interface{})
-	for fieldName, refDef := range def.refs {
-		var o interface{}
-		if o, err = p.getObject(refDef, opts); err != nil {
-			return
-		}
-		refObjs[fieldName] = o
-	}
 
 	var retObj interface{}
 
@@ -201,6 +247,27 @@ func (p *ClassicFactory) getObject(def *ObjectDefinition, opts Options) (obj int
 		}
 	}
 
+	// Get ref objects
+	var refObjs = make(map[string]interface{})
+	for fieldName, refDefName := range def.refs {
+		var refDef *ObjectDefinition
+		var exist bool
+		if refDef, exist = p.objDefinitions[refDefName]; !exist {
+			err = ErrObjectDefintionNotExist.New(errors.Params{"name": refDefName})
+			return
+		}
+
+		var refOpts Options
+		refOpts, _ = def.refsOptions[fieldName]
+
+		var o interface{}
+		if o, err = p.getObject(refDef, refOpts); err != nil {
+			return
+		}
+
+		refObjs[fieldName] = o
+	}
+
 	// Inject dependency object
 	for fieldName, fieldValue := range refObjs {
 		if err = p.setStructFieldValue(retObj, fieldName, fieldValue); err != nil {
@@ -229,7 +296,7 @@ func (p *ClassicFactory) getNewInstanceFunc(def *ObjectDefinition) (fn NewObject
 
 func (p *ClassicFactory) newTypeInstance(typ reflect.Type) (fn NewObjectFunc, err error) {
 
-	val := reflect.New(typ.Elem())
+	val := reflect.New(typ)
 
 	if !val.IsValid() {
 		err = ErrReflectValueNotValid.New()

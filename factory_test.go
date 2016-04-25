@@ -13,15 +13,21 @@ type testObjectC struct {
 	CValue *testObjectB
 }
 
-func newTestObjectB(opts Options) (v interface{}, err error) {
-	return &testObjectB{BValue: "VB"}, nil
-}
-
 type testObject struct {
 	isFromNewFunc bool
 
 	ObjB *testObjectB
 	ObjC testObjectC
+}
+
+func init() {
+	RegisterModel((*testObjectB)(nil), "testObjectB")
+	RegisterModel((*testObjectC)(nil), "testObjectC")
+	RegisterModel((*testObject)(nil), "testObject")
+}
+
+func newTestObjectB(opts Options) (v interface{}, err error) {
+	return &testObjectB{BValue: "VB"}, nil
 }
 
 func newTestObject(opts Options) (v interface{}, err error) {
@@ -30,17 +36,14 @@ func newTestObject(opts Options) (v interface{}, err error) {
 
 func TestClassicFactory(t *testing.T) {
 
-	var objDef ObjectDefinition
 	var err error
 
-	if objDef, err = NewObjectDefinition("testObjName", Prototype, new(testObject), DefOptOfNewObjectFunc(newTestObject)); err != nil {
+	factory := NewClassicFactory(nil)
+
+	if err = factory.Define("testObjName", Prototype, "testObjectB", DefOptOfNewObjectFunc(newTestObject)); err != nil {
 		t.Error(err)
 		return
 	}
-
-	factory := NewClassicFactory()
-
-	factory.RegisterObjectDefinition(objDef)
 
 	var obj interface{}
 	if obj, err = factory.GetObject("testObjName"); err != nil {
@@ -58,17 +61,14 @@ func TestClassicFactory(t *testing.T) {
 
 func TestClassicFactoryWithoutNewFunc(t *testing.T) {
 
-	var objDef ObjectDefinition
 	var err error
 
-	if objDef, err = NewObjectDefinition("testObjName", Prototype, new(testObject)); err != nil {
+	factory := NewClassicFactory(nil)
+
+	if err = factory.Define("testObjName", Prototype, "testObject"); err != nil {
 		t.Error(err)
 		return
 	}
-
-	factory := NewClassicFactory()
-
-	factory.RegisterObjectDefinition(objDef)
 
 	var obj interface{}
 	if obj, err = factory.GetObject("testObjName"); err != nil {
@@ -86,17 +86,13 @@ func TestClassicFactoryWithoutNewFunc(t *testing.T) {
 
 func TestClassicFactorySingleton(t *testing.T) {
 
-	var objDef ObjectDefinition
 	var err error
+	factory := NewClassicFactory(nil)
 
-	if objDef, err = NewObjectDefinition("testObjName", Singleton, new(testObject), DefOptOfNewObjectFunc(newTestObject)); err != nil {
+	if err = factory.Define("testObjName", Singleton, "testObject", DefOptOfNewObjectFunc(newTestObject)); err != nil {
 		t.Error(err)
 		return
 	}
-
-	factory := NewClassicFactory()
-
-	factory.RegisterObjectDefinition(objDef)
 
 	var obj interface{}
 	if obj, err = factory.GetObject("testObjName"); err != nil {
@@ -125,28 +121,24 @@ func TestClassicFactorySingleton(t *testing.T) {
 
 func TestClassicFactoryOfObjRef(t *testing.T) {
 
-	var objDef ObjectDefinition
-	var objBDef ObjectDefinition
 	var err error
 
-	if objBDef, err = NewObjectDefinition("testObjBName", Prototype, new(testObjectB), DefOptOfNewObjectFunc(newTestObjectB)); err != nil {
+	factory := NewClassicFactory(nil)
+
+	if err = factory.Define("testObjBName", Prototype, "testObjectB", DefOptOfNewObjectFunc(newTestObjectB)); err != nil {
 		t.Error(err)
 		return
 	}
 
-	if objDef, err = NewObjectDefinition("testObjName",
+	if err = factory.Define("testObjName",
 		Prototype,
-		new(testObject),
+		"testObject",
 		DefOptOfNewObjectFunc(newTestObject),
-		DefOptOfObjectRef("ObjB", objBDef),
-		DefOptOfObjectRef("ObjC.CValue", objBDef)); err != nil {
+		DefOptOfObjectRef("ObjB", "testObjBName"),
+		DefOptOfObjectRef("ObjC.CValue", "testObjBName")); err != nil {
 		t.Error(err)
 		return
 	}
-
-	factory := NewClassicFactory()
-
-	factory.RegisterObjectDefinition(objDef)
 
 	var obj interface{}
 	if obj, err = factory.GetObject("testObjName"); err != nil {

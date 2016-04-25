@@ -14,5 +14,5 @@ type Factory interface {
 	IsSingleton(name string) bool
 	IsTypeMatch(name string, typ reflect.Type) bool
 
-	RegisterObjectDefinition(definition ObjectDefinition) error
+	Define(name string, scope Scope, model string, opts ...DefinitionOption) error
 }

@@ -25,55 +25,11 @@ type ObjectDefinition struct {
 
 	scope Scope
 
-	obj             interface{}
 	newObjFunc      NewObjectFunc
-	reflectVal      reflect.Value
-	refs            map[string]*ObjectDefinition
+	typ             reflect.Type
+	refs            map[string]string
+	refsOptions     map[string]Options
 	initialFuncName string
-}
-
-func NewObjectDefinition(
-	name string,
-	scope Scope,
-	obj interface{},
-	opts ...DefinitionOption) (objDef ObjectDefinition, err error) {
-
-	name = strings.TrimSpace(name)
-	if name == "" {
-		err = ErrEmptyObjectDefinitionName.New()
-		return
-	}
-
-	originalVal := reflect.ValueOf(obj)
-	val := originalVal
-	for {
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-		} else {
-			break
-		}
-	}
-
-	if val.Kind() != reflect.Struct {
-		err = ErrObjectMustBeStruct.New(errors.Params{"name": name})
-		return
-	}
-
-	def := ObjectDefinition{
-		name:       name,
-		scope:      scope,
-		obj:        obj,
-		reflectVal: originalVal,
-		refs:       make(map[string]*ObjectDefinition),
-	}
-
-	if err = def.options(opts...); err != nil {
-		return
-	}
-
-	objDef = def
-
-	return
 }
 
 func (p *ObjectDefinition) Name() string {
@@ -89,7 +45,11 @@ func (p *ObjectDefinition) Scope() Scope {
 }
 
 func (p *ObjectDefinition) IsTypeMatch(typ reflect.Type) bool {
-	return typ == p.reflectVal.Type()
+	if typ.Kind() != reflect.Ptr {
+		return typ == p.typ
+	}
+
+	return typ.Elem() == p.typ
 }
 
 func (p *ObjectDefinition) NewObjectFunc() NewObjectFunc {
@@ -105,7 +65,7 @@ func (p *ObjectDefinition) Aliases() []string {
 }
 
 func (p *ObjectDefinition) Type() reflect.Type {
-	return p.reflectVal.Type()
+	return p.typ
 }
 
 func (p *ObjectDefinition) options(opts ...DefinitionOption) (err error) {
@@ -128,7 +88,7 @@ func DefOptOfNewObjectFunc(fn NewObjectFunc) DefinitionOption {
 	}}
 }
 
-func DefOptOfObjectRef(fieldName string, ref ObjectDefinition) DefinitionOption {
+func DefOptOfObjectRef(fieldName string, refDefName string, opts ...Options) DefinitionOption {
 	return DefinitionOption{func(od *ObjectDefinition) (err error) {
 
 		fieldName = strings.TrimSpace(fieldName)
@@ -138,14 +98,22 @@ func DefOptOfObjectRef(fieldName string, ref ObjectDefinition) DefinitionOption 
 			return
 		}
 
+		if refDefName == "" {
+			err = ErrRefDefinitionNameIsEmpty.New(errors.Params{"name": refDefName})
+			return
+		}
+
+		if originalRefDefName, exist := od.refs[fieldName]; exist {
+			if originalRefDefName != refDefName {
+				err = ErrFiledAreadyRef.New(errors.Params{"name": originalRefDefName})
+				return
+			}
+		}
+
 		fieldNames := strings.Split(fieldName, ".")
 		lenfields := len(fieldNames)
 
-		var typ reflect.Type
-		typ = od.reflectVal.Type()
-		if od.reflectVal.Kind() == reflect.Ptr {
-			typ = od.reflectVal.Type().Elem()
-		}
+		typ := od.typ
 
 		for i, fn := range fieldNames {
 
@@ -167,16 +135,16 @@ func DefOptOfObjectRef(fieldName string, ref ObjectDefinition) DefinitionOption 
 				if field.Type.Kind() != reflect.Ptr {
 					err = ErrRefFieldShouldBePtr.New()
 					return
-				} else if !ref.IsTypeMatch(field.Type) {
-					err = ErrRefTypeNotMatch.New(errors.Params{"typeA": ref.Type().String(), "typeB": field.Type.String()})
-					return
 				}
 			}
 
 			typ = field.Type
 		}
 
-		od.refs[fieldName] = &ref
+		od.refs[fieldName] = refDefName
+		if opts != nil && len(opts) > 0 {
+			od.refsOptions[fieldName] = opts[0]
+		}
 
 		return
 	}}
